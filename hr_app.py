@@ -4,11 +4,14 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import LabelEncoder
 
 # Ensure data folder exists (for local testing)
 os.makedirs("data", exist_ok=True)
 
-# Title
+# Page config
 st.set_page_config(page_title="HR Analytics Portal", layout="wide")
 st.title("📊 HR Analytics Dashboard")
 
@@ -30,8 +33,8 @@ if uploaded_file is not None:
     with open(f"data/uploaded_file.{file_type}", "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    # Basic info
-    st.subheader("Dataset Overview")
+    # Dataset overview
+    st.subheader("📄 Dataset Overview")
     st.write(df.head())
     st.markdown(f"**Total Records:** {len(df)}")
 
@@ -50,7 +53,7 @@ if uploaded_file is not None:
         col3.metric("💰 Avg. Monthly Income", f"${int(df['MonthlyIncome'].mean())}")
 
     # Charts
-    st.subheader("Visual Insights")
+    st.subheader("📈 Visual Insights")
 
     if 'Department' in df.columns:
         fig_dept = px.histogram(df, x='Department', title="Employees by Department")
@@ -71,6 +74,41 @@ if uploaded_file is not None:
     if 'MonthlyIncome' in df.columns and 'JobRole' in df.columns:
         fig_income = px.box(df, x='JobRole', y='MonthlyIncome', title="Income Distribution by Role")
         st.plotly_chart(fig_income, use_container_width=True)
+
+    # Attrition Driver Analysis
+    if 'Attrition' in df.columns:
+        st.subheader("🔍 What Drives Attrition?")
+        df['Attrition_Flag'] = df['Attrition'].apply(lambda x: 1 if x == 'Yes' else 0)
+
+        numeric_cols = df.select_dtypes(include=['int64', 'float64']).drop(columns=['Attrition_Flag'], errors='ignore')
+        correlations = numeric_cols.corrwith(df['Attrition_Flag']).sort_values(ascending=False)
+
+        st.write("Top correlated factors with Attrition:")
+        st.bar_chart(correlations.head(10))
+
+    # Attrition Prediction
+    if 'Attrition' in df.columns:
+        st.subheader("🔮 Predict Employees At Risk of Leaving")
+
+        df_model = df.copy()
+        le = LabelEncoder()
+        for col in df_model.select_dtypes(include='object').columns:
+            if col != 'Attrition':
+                df_model[col] = le.fit_transform(df_model[col])
+
+        X = df_model.drop(columns=['Attrition'])
+        y = df_model['Attrition']
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2)
+
+        model = LogisticRegression(max_iter=1000)
+        model.fit(X_train, y_train)
+
+        df['Attrition_Prob'] = model.predict_proba(X)[:, 1]
+
+        top_risks = df[df['Attrition'] == 'No'].sort_values(by='Attrition_Prob', ascending=False).head(10)
+        st.write("Top 10 Employees Likely to Exit:")
+        st.dataframe(top_risks[['EmployeeNumber', 'JobRole', 'MonthlyIncome', 'Attrition_Prob']])
 
 else:
     st.info("Please upload a CSV or Excel file to begin analysis.")
