@@ -1,37 +1,76 @@
+# hr_app.py
+
 import streamlit as st
-from utils import save_file, get_uploaded_file
-from data_processor import process_data, generate_summary
-import visualizations as viz
+import pandas as pd
+import plotly.express as px
 import os
 
+# Ensure data folder exists (for local testing)
+os.makedirs("data", exist_ok=True)
+
+# Title
 st.set_page_config(page_title="HR Analytics Portal", layout="wide")
 st.title("📊 HR Analytics Dashboard")
 
-uploaded_file = st.file_uploader("Upload HR Excel/CSV File", type=["xlsx", "csv"])
-if uploaded_file:
-    save_file(uploaded_file)
-    st.success("File uploaded successfully!")
+# Upload File
+uploaded_file = st.file_uploader("Upload HR Data (CSV or Excel)", type=["csv", "xlsx"])
 
-file_path = get_uploaded_file()
+if uploaded_file is not None:
+    file_type = uploaded_file.name.split('.')[-1]
 
-if file_path:
-    df = process_data(file_path)
-    summary = generate_summary(df)
+    if file_type == 'csv':
+        df = pd.read_csv(uploaded_file)
+    elif file_type == 'xlsx':
+        df = pd.read_excel(uploaded_file, engine='openpyxl')
+    else:
+        st.error("Unsupported file format")
+        st.stop()
 
-    # KPIs
-    st.subheader("Key Metrics")
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Employees", summary["Total Employees"])
-    col2.metric("Average Age", summary["Average Age"])
-    col3.metric("Attrition Rate", f'{summary["Attrition Rate"]:.2f}%')
-    col4.metric("Departments", len(summary["Department Count"]))
+    # Optional: Save for local development
+    with open(f"data/uploaded_file.{file_type}", "wb") as f:
+        f.write(uploaded_file.getbuffer())
 
-    st.markdown("---")
+    # Basic info
+    st.subheader("Dataset Overview")
+    st.write(df.head())
+    st.markdown(f"**Total Records:** {len(df)}")
+
+    # Sidebar filters
+    st.sidebar.header("Filters")
+    if 'Department' in df.columns:
+        departments = st.sidebar.multiselect("Select Departments", df['Department'].unique(), default=df['Department'].unique())
+        df = df[df['Department'].isin(departments)]
+
+    # Summary KPIs
+    col1, col2, col3 = st.columns(3)
+    col1.metric("👥 Headcount", len(df))
+    if 'Age' in df.columns:
+        col2.metric("🧓 Average Age", round(df['Age'].mean(), 1))
+    if 'MonthlyIncome' in df.columns:
+        col3.metric("💰 Avg. Monthly Income", f"${int(df['MonthlyIncome'].mean())}")
 
     # Charts
-    viz.plot_gender_distribution(df)
-    viz.plot_age_group(df)
-    viz.plot_department_distribution(df)
-    viz.plot_attrition_by_department(df)
+    st.subheader("Visual Insights")
+
+    if 'Department' in df.columns:
+        fig_dept = px.histogram(df, x='Department', title="Employees by Department")
+        st.plotly_chart(fig_dept, use_container_width=True)
+
+    if 'JobRole' in df.columns:
+        fig_role = px.histogram(df, x='JobRole', title="Employees by Job Role")
+        st.plotly_chart(fig_role, use_container_width=True)
+
+    if 'Gender' in df.columns:
+        fig_gender = px.pie(df, names='Gender', title="Gender Distribution")
+        st.plotly_chart(fig_gender, use_container_width=True)
+
+    if 'Attrition' in df.columns:
+        fig_attrition = px.histogram(df, x='Department', color='Attrition', barmode='group', title="Attrition by Department")
+        st.plotly_chart(fig_attrition, use_container_width=True)
+
+    if 'MonthlyIncome' in df.columns and 'JobRole' in df.columns:
+        fig_income = px.box(df, x='JobRole', y='MonthlyIncome', title="Income Distribution by Role")
+        st.plotly_chart(fig_income, use_container_width=True)
+
 else:
-    st.warning("Please upload a file to begin analysis.")
+    st.info("Please upload a CSV or Excel file to begin analysis.")
