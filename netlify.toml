@@ -1,0 +1,8 @@
+[build]
+command = "streamlit run hr_app.py"
+publish = "."
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
