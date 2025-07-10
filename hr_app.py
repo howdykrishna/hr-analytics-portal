@@ -7,6 +7,8 @@ import os
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder
+from io import BytesIO
+import base64
 
 # Ensure data folder exists (for local testing)
 os.makedirs("data", exist_ok=True)
@@ -109,6 +111,12 @@ if uploaded_file is not None:
         top_risks = df[df['Attrition'] == 'No'].sort_values(by='Attrition_Prob', ascending=False).head(10)
         st.write("Top 10 Employees Likely to Exit:")
         st.dataframe(top_risks[['EmployeeNumber', 'JobRole', 'MonthlyIncome', 'Attrition_Prob']])
+
+        # Download button for top risks
+        csv = top_risks.to_csv(index=False)
+        b64 = base64.b64encode(csv.encode()).decode()
+        href = f'<a href="data:file/csv;base64,{b64}" download="attrition_risks.csv">📥 Download At-Risk Employees CSV</a>'
+        st.markdown(href, unsafe_allow_html=True)
 
 else:
     st.info("Please upload a CSV or Excel file to begin analysis.")
